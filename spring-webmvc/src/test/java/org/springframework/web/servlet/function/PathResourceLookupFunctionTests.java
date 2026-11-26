@@ -138,6 +138,23 @@ class PathResourceLookupFunctionTests {
 		assertThat(result.get().getFile()).isEqualTo(staticDir.resolve(" śpřìńġ.txt").toFile());
 	}
 
+	@ParameterizedTest  // gh-36693
+	@ValueSource(strings = {
+			"web-inf/secret.txt",
+			"Meta-Inf/secret.txt",
+			"%77eb-inf/secret.txt"
+	})
+	void fileSystemResourceLocationWithWebInfOrMetaInfIgnoringCase(String path, @TempDir Path tempDir) throws Exception {
+		Path staticDir = Files.createDirectories(tempDir.resolve("static"));
+		Files.writeString(Files.createDirectories(staticDir.resolve("web-inf")).resolve("secret.txt"), "secret");
+		Files.writeString(Files.createDirectories(staticDir.resolve("Meta-Inf")).resolve("secret.txt"), "secret");
+		Resource location = new FileSystemResource(staticDir.toString() + "/");
+		PathResourceLookupFunction function = new PathResourceLookupFunction("/resources/**", location);
+
+		Optional<Resource> result = function.apply(initRequest("GET", "/resources/" + path));
+		assertThat(result).isNotPresent();
+	}
+
 	private ServerRequest initRequest(String httpMethod, String requestUri) {
 		return new DefaultServerRequest(
 				PathPatternsTestUtils.initRequest(httpMethod, requestUri, true),

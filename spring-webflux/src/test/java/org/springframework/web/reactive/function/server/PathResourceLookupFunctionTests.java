@@ -18,15 +18,23 @@ package org.springframework.web.reactive.function.server;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.testfixture.http.server.reactive.MockServerHttpRequest;
 import org.springframework.web.testfixture.server.MockServerWebExchange;
 
@@ -120,6 +128,30 @@ class PathResourceLookupFunctionTests {
 						return false;
 					}
 				})
+				.expectComplete()
+				.verify();
+	}
+
+	@ParameterizedTest  // gh-36693
+	@ValueSource(strings = {
+			"web-inf/secret.txt",
+			"Meta-Inf/secret.txt",
+			"%77eb-inf/secret.txt"
+	})
+	void fileSystemResourceLocationWithWebInfOrMetaInfIgnoringCase(String path, @TempDir Path tempDir) throws Exception {
+		Path staticDir = Files.createDirectories(tempDir.resolve("static"));
+		Files.writeString(Files.createDirectories(staticDir.resolve("web-inf")).resolve("secret.txt"), "secret");
+		Files.writeString(Files.createDirectories(staticDir.resolve("Meta-Inf")).resolve("secret.txt"), "secret");
+		Resource location = new FileSystemResource(staticDir.toString() + "/");
+		PathResourceLookupFunction function = new PathResourceLookupFunction("/resources/**", location);
+
+		// Use the raw URI so that encoded sequences reach the lookup function as-is
+		MockServerHttpRequest mockRequest = MockServerHttpRequest
+				.method(HttpMethod.GET, URI.create("https://localhost/resources/" + path)).build();
+		ServerRequest request = new DefaultServerRequest(MockServerWebExchange.from(mockRequest), Collections.emptyList());
+		Mono<Resource> result = function.apply(request);
+
+		StepVerifier.create(result)
 				.expectComplete()
 				.verify();
 	}
